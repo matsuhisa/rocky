@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import type { SequenceField } from "../shared/types.ts";
 import { audioPathFor } from "./audio.ts";
 import type { Lang } from "./tts.ts";
-import { loadWordData } from "./words.ts";
+import { addWord, loadWordData } from "./words.ts";
 
 // 読み上げ項目ごとの言語
 const LANG_OF: Record<SequenceField, Lang> = { word: "en", en: "en", ja: "ja" };
@@ -14,6 +14,29 @@ const app = new Hono();
 app.get("/api/words", async (c) => {
   const { words } = await loadWordData();
   return c.json({ words });
+});
+
+app.post("/api/words", async (c) => {
+  const result = await addWord(await c.req.json().catch(() => null));
+  if (!result.ok) return c.json({ error: result.errors.join(" "), errors: result.errors }, 400);
+
+  // 登録時に音声をまとめて生成しておく。失敗しても登録は取り消さず、再生時に作り直す
+  const { word } = result;
+  const texts: [string, Lang][] = [
+    [word.word, "en"],
+    ...word.examples.flatMap((e): [string, Lang][] => [
+      [e.en, "en"],
+      [e.ja, "ja"],
+    ]),
+  ];
+  let audioReady = true;
+  try {
+    await Promise.all(texts.map(([text, lang]) => audioPathFor(text, lang)));
+  } catch (e) {
+    console.error(e);
+    audioReady = false;
+  }
+  return c.json({ word, audioReady }, 201);
 });
 
 app.get("/api/words/:word", async (c) => {

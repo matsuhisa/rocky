@@ -16,6 +16,9 @@ export function WordList() {
   return (
     <main>
       <h1>単語一覧</h1>
+      <p>
+        <Link to="/new">＋ 単語を登録</Link>
+      </p>
       {error && <p className="error">{error}</p>}
       {!error && !words && <p>読み込み中…</p>}
       {words?.length === 0 && <p>まだ単語がありません。</p>}

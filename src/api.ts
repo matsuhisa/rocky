@@ -25,3 +25,28 @@ export function audioUrl(word: string, field: SequenceField, example = 0): strin
   const query = new URLSearchParams({ field, example: String(example) });
   return `/api/words/${encodeURIComponent(word)}/audio?${query}`;
 }
+
+// 入力の誤りなど、画面にそのまま出せるメッセージを持つエラー
+export class ApiError extends Error {
+  errors: string[];
+  constructor(errors: string[]) {
+    super(errors.join(" "));
+    this.errors = errors;
+  }
+}
+
+// 単語を登録する。音声の生成まで終わってから返るので、数秒かかる
+export async function createWord(
+  input: Word,
+): Promise<{ word: Word; audioReady: boolean }> {
+  const res = await fetch("/api/words", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const { errors } = await res.json().catch(() => ({ errors: null }));
+    throw new ApiError(errors ?? [`登録に失敗しました (${res.status})`]);
+  }
+  return res.json();
+}
