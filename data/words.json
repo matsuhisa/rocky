@@ -1,0 +1,29 @@
+{
+  "sequence": ["word", "en", "ja", "en"],
+  "words": [
+    {
+      "word": "resilient",
+      "examples": [
+        {
+          "en": "She remained resilient despite all the setbacks.",
+          "ja": "彼女は数々の挫折にもかかわらず、くじけなかった。",
+          "note": "remain + 形容詞 で「〜のままでいる」。setback は「挫折、つまずき」。"
+        }
+      ]
+    },
+    {
+      "word": "abandon",
+      "examples": [
+        {
+          "en": "He had to abandon his plan.",
+          "ja": "彼は計画を断念しなければならなかった。"
+        },
+        {
+          "en": "The crew abandoned the sinking ship.",
+          "ja": "乗組員は沈みゆく船を見捨てた。",
+          "note": "「計画をやめる」と「人や物を見捨てる」の両方に使える。"
+        }
+      ]
+    }
+  ]
+}
