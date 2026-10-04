@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import type { SequenceField, Word } from "../../shared/types.ts";
 import { audioUrl, fetchWord } from "../api.ts";
-import { usePlayer } from "../usePlayer.ts";
+import { PLAYBACK_RATES, REWIND_SECONDS, usePlayer } from "../usePlayer.ts";
 
 const FIELD_LABELS: Record<SequenceField, string> = {
   word: "単語",
@@ -16,7 +16,7 @@ export function WordDetail() {
     null,
   );
   const [loadError, setLoadError] = useState<string | null>(null);
-  const { playing, error: playError, play, stop } = usePlayer();
+  const { playing, error: playError, rate, play, stop, rewind, setRate } = usePlayer();
   // 登録直後に音声の生成が失敗していた場合、登録画面から渡される
   const audioFailed = (useLocation().state as { audioFailed?: boolean } | null)?.audioFailed;
 
@@ -61,6 +61,18 @@ export function WordDetail() {
             </p>
           )}
           {playError && <p className="error">{playError}</p>}
+          <p>
+            <label>
+              再生スピード{" "}
+              <select value={rate} onChange={(e) => setRate(Number(e.target.value))}>
+                {PLAYBACK_RATES.map((r) => (
+                  <option key={r} value={r}>
+                    {r === 1 ? "1.0 / 標準" : r.toFixed(1)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </p>
           {data.word.examples.map((example, i) => {
             const sequenceId = `sequence-${i}`;
             const active = playing?.id === sequenceId;
@@ -87,6 +99,11 @@ export function WordDetail() {
                   >
                     {!active ? "▶ 順番に再生" : playing.loading ? "読み込み中…" : "■ 停止"}
                   </button>
+                  {active && !playing.loading && (
+                    <button type="button" onClick={rewind}>
+                      ⏪ {REWIND_SECONDS}秒戻る
+                    </button>
+                  )}
                   <ol>
                     {data.sequence.map((field, step) => (
                       <li

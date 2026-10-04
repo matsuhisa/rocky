@@ -167,3 +167,8 @@ button:disabled {
   opacity: 0.6;
   cursor: default;
 }
+
+select {
+  font: inherit;
+  padding: 2px 4px;
+}
