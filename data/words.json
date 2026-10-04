@@ -1,5 +1,10 @@
 {
-  "sequence": ["word", "en", "ja", "en"],
+  "sequence": [
+    "word",
+    "en",
+    "ja",
+    "en"
+  ],
   "words": [
     {
       "word": "resilient",
@@ -22,6 +27,16 @@
           "en": "The crew abandoned the sinking ship.",
           "ja": "乗組員は沈みゆく船を見捨てた。",
           "note": "「計画をやめる」と「人や物を見捨てる」の両方に使える。"
+        }
+      ]
+    },
+    {
+      "word": "either",
+      "examples": [
+        {
+          "en": "Employees can register for the workshop either online or at the front desk.",
+          "ja": "従業員は、オンラインまたは受付のどちらかでワークショップの参加登録を行うことができます。",
+          "note": "eitherの後ろにある or に注目するのがポイントです。\nTOEIC Part 5 では 「either A or B（AかBのどちらか）」 という相関接続詞のコロケーション（定番の組み合わせ）が非常に頻出します。\n\n- either A or B（AまたはBのどちらか）\n- both A and B（AとBの両方）\n- neither A nor B（AもBも〜ない）"
         }
       ]
     }
