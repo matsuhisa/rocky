@@ -38,7 +38,7 @@ export function WordDetail() {
         aria-label={`${FIELD_LABELS[field]}を${active ? "停止" : "再生"}`}
         onClick={() => (active ? stop() : play(id, [audioUrl(wordParam, field, example)]))}
       >
-        {active ? "■" : "▶"}
+        {!active ? "▶" : playing.loading ? "…" : "■"}
       </button>
     );
   };
@@ -85,13 +85,17 @@ export function WordDetail() {
                           )
                     }
                   >
-                    {active ? "■ 停止" : "▶ 順番に再生"}
+                    {!active ? "▶ 順番に再生" : playing.loading ? "読み込み中…" : "■ 停止"}
                   </button>
                   <ol>
                     {data.sequence.map((field, step) => (
                       <li
                         key={step}
-                        className={active && playing.index === step ? "current" : undefined}
+                        className={
+                          active && !playing.loading && playing.index === step
+                            ? "current"
+                            : undefined
+                        }
                       >
                         {FIELD_LABELS[field]}
                       </li>
