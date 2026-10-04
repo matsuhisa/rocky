@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import type { Word } from "../../shared/types.ts";
 import { fetchWords } from "../api.ts";
 
@@ -22,7 +23,9 @@ export function WordList() {
         <ul className="word-list">
           {words.map(({ word, examples }) => (
             <li key={word}>
-              <span className="word">{word}</span>
+              <Link className="word" to={`/words/${encodeURIComponent(word)}`}>
+                {word}
+              </Link>
               <span className="example">{examples[0]?.en}</span>
               <span className="count">例文 {examples.length}</span>
             </li>

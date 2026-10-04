@@ -1,13 +1,11 @@
 // data/words.json の単語と例文を、sequence の順番で読み上げる
 // 使い方: node --env-file=.env scripts/speak.mjs [単語...] [--no-play]
-import { readFile, writeFile, mkdir, access } from "node:fs/promises";
-import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { synthesize, voiceId } from "./tts.mjs";
+import { audioPathFor } from "../server/audio.ts";
 
 const DATA_PATH = "data/words.json";
-const CACHE_DIR = "out/cache";
 
 // sequence に書ける項目と、その読み上げ言語
 const FIELDS = { word: "en", en: "en", ja: "ja" };
@@ -34,19 +32,6 @@ if (missing.length > 0) {
 const selected =
   targets.length > 0 ? words.filter((w) => targets.includes(w.word)) : words;
 
-// 同じテキストは一度だけ生成し、以降は保存した音声を使い回す
-async function audioPathFor(text, lang) {
-  const hash = createHash("sha1").update(`${voiceId}\n${lang}\n${text}`).digest("hex");
-  const path = `${CACHE_DIR}/${hash}.wav`;
-  try {
-    await access(path);
-  } catch {
-    await writeFile(path, await synthesize(text, lang));
-  }
-  return path;
-}
-
-await mkdir(CACHE_DIR, { recursive: true });
 for (const { word, examples } of selected) {
   for (const example of examples) {
     const texts = { word, en: example.en, ja: example.ja };

@@ -52,3 +52,66 @@ h1 {
   grid-column: 1 / -1;
   color: light-dark(#444, #ccc);
 }
+
+a {
+  color: light-dark(#0b57d0, #a8c7fa);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid light-dark(#bbb, #666);
+  border-radius: 6px;
+  background: light-dark(#f5f5f5, #333);
+  color: inherit;
+  padding: 4px 12px;
+}
+
+button.play {
+  padding: 0 8px;
+  font-size: 0.8rem;
+  vertical-align: middle;
+}
+
+.example-card {
+  border: 1px solid light-dark(#ddd, #444);
+  border-radius: 8px;
+  padding: 4px 16px 12px;
+  margin-bottom: 16px;
+}
+
+.example-card .en {
+  font-size: 1.1rem;
+}
+
+.example-card .note {
+  color: light-dark(#555, #bbb);
+  font-size: 0.9rem;
+}
+
+.sequence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.sequence ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.85rem;
+  color: light-dark(#666, #aaa);
+}
+
+.sequence li + li::before {
+  content: "→ ";
+}
+
+.sequence li.current {
+  color: inherit;
+  font-weight: 600;
+}

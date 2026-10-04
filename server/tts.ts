@@ -2,8 +2,10 @@
 const MODEL = process.env.GEMINI_TTS_MODEL ?? "gemini-2.5-flash-preview-tts";
 const VOICE = process.env.GEMINI_TTS_VOICE ?? "Kore";
 
+export type Lang = "en" | "ja";
+
 // 短い単語だけだと読み上げ対象と解釈されないことがあるので、指示を明示する
-const INSTRUCTIONS = {
+const INSTRUCTIONS: Record<Lang, string> = {
   en: "Say clearly: ",
   ja: "次の日本語をはっきり読み上げてください: ",
 };
@@ -11,14 +13,16 @@ const INSTRUCTIONS = {
 // 同じ音声になる条件 (キャッシュのキーに使う)
 export const voiceId = `${MODEL}/${VOICE}`;
 
+const MAX_RETRIES = 5;
+
 // レスポンスの mimeType (例: audio/L16;codec=pcm;rate=24000) からサンプルレートを取る
-function sampleRateOf(mimeType) {
+function sampleRateOf(mimeType: string | undefined): number {
   const m = /rate=(\d+)/.exec(mimeType ?? "");
   return m ? Number(m[1]) : 24000;
 }
 
 // 生 PCM (16bit / モノラル) に WAV ヘッダを付ける
-function pcmToWav(pcm, sampleRate) {
+function pcmToWav(pcm: Buffer, sampleRate: number): Buffer {
   const header = Buffer.alloc(44);
   header.write("RIFF", 0);
   header.writeUInt32LE(36 + pcm.length, 4);
@@ -36,11 +40,9 @@ function pcmToWav(pcm, sampleRate) {
   return Buffer.concat([header, pcm]);
 }
 
-const MAX_RETRIES = 5;
-
 // 429 のレスポンスから、待てば直るか (1日の上限なら待っても無駄) と待ち時間を読み取る
-function rateLimitOf(body) {
-  let details = [];
+function rateLimitOf(body: string): { daily: boolean; waitMs: number | null } {
+  let details: { violations?: { quotaId?: string }[]; retryDelay?: string }[] = [];
   try {
     details = JSON.parse(body).error?.details ?? [];
   } catch {}
@@ -54,14 +56,13 @@ function rateLimitOf(body) {
   };
 }
 
-export async function synthesize(text, lang = "en") {
+export async function synthesize(text: string, lang: Lang = "en"): Promise<Buffer> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error("GEMINI_API_KEY が設定されていません (.env に書いてください)");
   }
-  let res;
   for (let attempt = 0; ; attempt++) {
-    res = await fetch(
+    const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
       {
         method: "POST",
@@ -77,8 +78,9 @@ export async function synthesize(text, lang = "en") {
         }),
       },
     );
-    if (res.ok) break;
     const body = await res.text();
+    const canRetry = attempt < MAX_RETRIES;
+
     if (res.status === 429) {
       const { daily, waitMs } = rateLimitOf(body);
       if (daily) {
@@ -86,7 +88,7 @@ export async function synthesize(text, lang = "en") {
           `Gemini API の1日あたりの上限に達しました。明日以降に再実行するか、課金を有効にしてください: ${body}`,
         );
       }
-      if (attempt < MAX_RETRIES) {
+      if (canRetry) {
         // 1分あたりの上限。API が指定した時間 (無ければ 30秒〜) 待ってやり直す
         const ms = waitMs ?? 30000 * (attempt + 1);
         console.error(`  (レート制限のため ${Math.round(ms / 1000)} 秒待ちます)`);
@@ -94,16 +96,22 @@ export async function synthesize(text, lang = "en") {
         continue;
       }
     }
-    throw new Error(`Gemini API エラー ${res.status}: ${body}`);
+    if (!res.ok) {
+      throw new Error(`Gemini API エラー ${res.status}: ${body}`);
+    }
+
+    const parts: { inlineData?: { data: string; mimeType?: string } }[] =
+      JSON.parse(body).candidates?.[0]?.content?.parts ?? [];
+    const inline = parts.find((p) => p.inlineData)?.inlineData;
+    if (inline) {
+      return pcmToWav(
+        Buffer.from(inline.data, "base64"),
+        sampleRateOf(inline.mimeType),
+      );
+    }
+    // 200 でも音声が入っていない応答がまれにあるので、やり直す
+    if (!canRetry) {
+      throw new Error(`音声が返ってきませんでした: ${body}`);
+    }
   }
-  const json = await res.json();
-  const inline = json.candidates?.[0]?.content?.parts?.find((p) => p.inlineData)
-    ?.inlineData;
-  if (!inline) {
-    throw new Error(`音声が返ってきませんでした: ${JSON.stringify(json)}`);
-  }
-  return pcmToWav(
-    Buffer.from(inline.data, "base64"),
-    sampleRateOf(inline.mimeType),
-  );
 }
