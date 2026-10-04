@@ -3,7 +3,7 @@
 import { writeFile, mkdir } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { synthesize } from "./tts.mjs";
+import { synthesize } from "../server/tts.ts";
 
 const OUT_DIR = "out";
 
