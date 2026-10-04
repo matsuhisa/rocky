@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useLocation, useParams } from "react-router";
 import type { SequenceField, Word } from "../../shared/types.ts";
 import { audioUrl, fetchWord } from "../api.ts";
 import { usePlayer } from "../usePlayer.ts";
@@ -17,6 +17,8 @@ export function WordDetail() {
   );
   const [loadError, setLoadError] = useState<string | null>(null);
   const { playing, error: playError, play, stop } = usePlayer();
+  // 登録直後に音声の生成が失敗していた場合、登録画面から渡される
+  const audioFailed = (useLocation().state as { audioFailed?: boolean } | null)?.audioFailed;
 
   useEffect(() => {
     setData(null);
@@ -53,6 +55,11 @@ export function WordDetail() {
           <h1>
             {data.word.word} {playButton("word", "word")}
           </h1>
+          {audioFailed && (
+            <p className="error">
+              登録はできましたが、音声の生成に失敗しました。再生するときにもう一度生成します。
+            </p>
+          )}
           {playError && <p className="error">{playError}</p>}
           {data.word.examples.map((example, i) => {
             const sequenceId = `sequence-${i}`;
