@@ -1,0 +1,9 @@
+{
+  // サーバー (Cloudflare Workers で動くコード) と、Node で動く設定・テスト
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["@cloudflare/workers-types", "node"]
+  },
+  "include": ["server", "shared", "vite.config.ts"]
+}

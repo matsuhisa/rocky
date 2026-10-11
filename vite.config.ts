@@ -1,10 +1,8 @@
-import { defineConfig } from "vite";
+import { cloudflare } from "@cloudflare/vite-plugin";
 import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
 export default defineConfig({
-  plugins: [react()],
-  server: {
-    // API は別プロセスの Hono サーバーに流す
-    proxy: { "/api": "http://localhost:8787" },
-  },
+  // cloudflare プラグインが、手元でも Workers と同じ環境で server/ を動かす
+  plugins: [react(), cloudflare()],
 });
