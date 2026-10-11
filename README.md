@@ -16,6 +16,19 @@ http://localhost:5173/ で開く。初回と、`migrations/` に追加があっ�
 
 手元の D1 と R2 の中身は `.wrangler/` に保存され、Cloudflare には送られない。
 
+## 公開
+
+https://rocky.matsuhisa.workers.dev で動いている。Cloudflare Access でログインした人だけが使える。
+
+```
+npm run deploy              # ビルドしてデプロイ
+npm run db:migrate:remote   # migrations/ の追加を本番の D1 に適用
+```
+
+- API は Access が付けるログイン情報を検証し、無いものは拒否する (`server/access.ts`)。`wrangler.jsonc` の `ACCESS_TEAM_DOMAIN` と `ACCESS_AUD` が Access のアプリと対応している
+- `GEMINI_API_KEY` は `wrangler secret put GEMINI_API_KEY` で登録する
+- ログインを許可する人は、Cloudflare の Zero Trust の画面で管理する
+
 ## その他のコマンド
 
 ```

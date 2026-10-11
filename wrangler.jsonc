@@ -12,10 +12,14 @@
     {
       "binding": "DB",
       "database_name": "rocky",
-      // 手元では使われない。公開するときに実際の ID に置き換える
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "b463b734-8376-4a27-a9cb-b15fcd6191d0",
       "migrations_dir": "migrations"
     }
   ],
-  "r2_buckets": [{ "binding": "AUDIO", "bucket_name": "rocky-audio" }]
+  "r2_buckets": [{ "binding": "AUDIO", "bucket_name": "rocky-audio" }],
+  "vars": {
+    // Cloudflare Access の設定 (秘密の値ではない)。空にすると API はすべて拒否する
+    "ACCESS_TEAM_DOMAIN": "withered-paper-fd3a.cloudflareaccess.com",
+    "ACCESS_AUD": "70d7c408452495582efd026856961cd42c45275f6723c5da28abb589a1904590"
+  }
 }

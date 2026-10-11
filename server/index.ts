@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { SEQUENCE } from "../shared/sequence.ts";
 import type { SequenceField } from "../shared/types.ts";
+import { requireAccess } from "./access.ts";
 import { audioFor, ensureAudio } from "./audio.ts";
 import type { Env } from "./env.ts";
 import type { Lang } from "./tts.ts";
@@ -15,6 +16,8 @@ app.onError((e, c) => {
   console.error(e);
   return c.json({ error: "サーバーでエラーが起きました" }, 500);
 });
+
+app.use("/api/*", requireAccess);
 
 app.get("/api/words", async (c) => {
   return c.json({ words: await listWords(c.env.DB) });
