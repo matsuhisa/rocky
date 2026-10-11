@@ -1,4 +1,6 @@
 .env
-out/
+.dev.vars
+.wrangler/
 node_modules/
 dist/
+out/

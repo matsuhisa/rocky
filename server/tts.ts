@@ -1,6 +1,5 @@
 // Gemini API の TTS でテキストを WAV に変換する
-const MODEL = process.env.GEMINI_TTS_MODEL ?? "gemini-2.5-flash-preview-tts";
-const VOICE = process.env.GEMINI_TTS_VOICE ?? "Kore";
+import type { Env } from "./env.ts";
 
 export type Lang = "en" | "ja";
 
@@ -10,10 +9,14 @@ const INSTRUCTIONS: Record<Lang, string> = {
   ja: "次の日本語をはっきり読み上げてください: ",
 };
 
-// 同じ音声になる条件 (キャッシュのキーに使う)
-export const voiceId = `${MODEL}/${VOICE}`;
+// リクエストの中で待つので、やり直しは少なめにする
+const MAX_RETRIES = 2;
 
-const MAX_RETRIES = 5;
+const modelOf = (env: Env) => env.GEMINI_TTS_MODEL ?? "gemini-2.5-flash-preview-tts";
+const voiceOf = (env: Env) => env.GEMINI_TTS_VOICE ?? "Kore";
+
+// 同じ音声になる条件 (キャッシュのキーに使う)
+export const voiceIdOf = (env: Env) => `${modelOf(env)}/${voiceOf(env)}`;
 
 // レスポンスの mimeType (例: audio/L16;codec=pcm;rate=24000) からサンプルレートを取る
 function sampleRateOf(mimeType: string | undefined): number {
@@ -22,22 +25,26 @@ function sampleRateOf(mimeType: string | undefined): number {
 }
 
 // 生 PCM (16bit / モノラル) に WAV ヘッダを付ける
-function pcmToWav(pcm: Buffer, sampleRate: number): Buffer {
-  const header = Buffer.alloc(44);
-  header.write("RIFF", 0);
-  header.writeUInt32LE(36 + pcm.length, 4);
-  header.write("WAVE", 8);
-  header.write("fmt ", 12);
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20); // PCM
-  header.writeUInt16LE(1, 22); // モノラル
-  header.writeUInt32LE(sampleRate, 24);
-  header.writeUInt32LE(sampleRate * 2, 28);
-  header.writeUInt16LE(2, 32);
-  header.writeUInt16LE(16, 34);
-  header.write("data", 36);
-  header.writeUInt32LE(pcm.length, 40);
-  return Buffer.concat([header, pcm]);
+function pcmToWav(pcm: Uint8Array, sampleRate: number): Uint8Array {
+  const wav = new Uint8Array(44 + pcm.length);
+  const header = new DataView(wav.buffer);
+  const ascii = (offset: number, text: string) =>
+    [...text].forEach((ch, i) => header.setUint8(offset + i, ch.charCodeAt(0)));
+  ascii(0, "RIFF");
+  header.setUint32(4, 36 + pcm.length, true);
+  ascii(8, "WAVE");
+  ascii(12, "fmt ");
+  header.setUint32(16, 16, true);
+  header.setUint16(20, 1, true); // PCM
+  header.setUint16(22, 1, true); // モノラル
+  header.setUint32(24, sampleRate, true);
+  header.setUint32(28, sampleRate * 2, true);
+  header.setUint16(32, 2, true);
+  header.setUint16(34, 16, true);
+  ascii(36, "data");
+  header.setUint32(40, pcm.length, true);
+  wav.set(pcm, 44);
+  return wav;
 }
 
 // 429 のレスポンスから、待てば直るか (1日の上限なら待っても無駄) と待ち時間を読み取る
@@ -56,23 +63,22 @@ function rateLimitOf(body: string): { daily: boolean; waitMs: number | null } {
   };
 }
 
-export async function synthesize(text: string, lang: Lang = "en"): Promise<Buffer> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY が設定されていません (.env に書いてください)");
+export async function synthesize(env: Env, text: string, lang: Lang): Promise<Uint8Array> {
+  if (!env.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY が設定されていません");
   }
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelOf(env)}:generateContent`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
         body: JSON.stringify({
           contents: [{ parts: [{ text: INSTRUCTIONS[lang] + text }] }],
           generationConfig: {
             responseModalities: ["AUDIO"],
             speechConfig: {
-              voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE } },
+              voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceOf(env) } },
             },
           },
         }),
@@ -84,15 +90,11 @@ export async function synthesize(text: string, lang: Lang = "en"): Promise<Buffe
     if (res.status === 429) {
       const { daily, waitMs } = rateLimitOf(body);
       if (daily) {
-        throw new Error(
-          `Gemini API の1日あたりの上限に達しました。明日以降に再実行するか、課金を有効にしてください: ${body}`,
-        );
+        throw new Error(`Gemini API の1日あたりの上限に達しました: ${body}`);
       }
       if (canRetry) {
-        // 1分あたりの上限。API が指定した時間 (無ければ 30秒〜) 待ってやり直す
-        const ms = waitMs ?? 30000 * (attempt + 1);
-        console.error(`  (レート制限のため ${Math.round(ms / 1000)} 秒待ちます)`);
-        await new Promise((resolve) => setTimeout(resolve, ms));
+        // 1分あたりの上限。API が指定した時間 (無ければ 20秒) 待ってやり直す
+        await new Promise((resolve) => setTimeout(resolve, waitMs ?? 20000));
         continue;
       }
     }
@@ -104,10 +106,8 @@ export async function synthesize(text: string, lang: Lang = "en"): Promise<Buffe
       JSON.parse(body).candidates?.[0]?.content?.parts ?? [];
     const inline = parts.find((p) => p.inlineData)?.inlineData;
     if (inline) {
-      return pcmToWav(
-        Buffer.from(inline.data, "base64"),
-        sampleRateOf(inline.mimeType),
-      );
+      const pcm = Uint8Array.from(atob(inline.data), (ch) => ch.charCodeAt(0));
+      return pcmToWav(pcm, sampleRateOf(inline.mimeType));
     }
     // 200 でも音声が入っていない応答がまれにあるので、やり直す
     if (!canRetry) {

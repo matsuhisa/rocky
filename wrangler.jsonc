@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rocky",
+  "main": "server/index.ts",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    // 画面のパス (/words/... など) は index.html を返し、/api だけ Worker で処理する
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "rocky",
+      // 手元では使われない。公開するときに実際の ID に置き換える
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "AUDIO", "bucket_name": "rocky-audio" }]
+}
