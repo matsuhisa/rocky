@@ -7,7 +7,9 @@
     "db:migrate": "wrangler d1 migrations apply rocky --local",
     "build": "vite build",
     "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.worker.json",
-    "test": "node --test \"server/**/*.test.ts\""
+    "test": "node --test \"server/**/*.test.ts\"",
+    "deploy": "vite build && wrangler deploy",
+    "db:migrate:remote": "wrangler d1 migrations apply rocky --remote"
   },
   "dependencies": {
     "hono": "^4.13.13",
