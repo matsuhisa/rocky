@@ -35,18 +35,27 @@ export class ApiError extends Error {
   }
 }
 
-// 単語を登録する。音声の生成まで終わってから返るので、数秒かかる
-export async function createWord(
-  input: Word,
-): Promise<{ word: Word; audioReady: boolean }> {
-  const res = await fetch("/api/words", {
-    method: "POST",
+type Saved = { word: Word; audioReady: boolean };
+
+async function saveWord(method: string, url: string, input: Word, what: string): Promise<Saved> {
+  const res = await fetch(url, {
+    method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
   if (!res.ok) {
     const { errors } = await res.json().catch(() => ({ errors: null }));
-    throw new ApiError(errors ?? [`登録に失敗しました (${res.status})`]);
+    throw new ApiError(errors ?? [`${what}に失敗しました (${res.status})`]);
   }
   return res.json();
+}
+
+// 単語を登録する。音声の生成まで終わってから返るので、数秒かかる
+export function createWord(input: Word): Promise<Saved> {
+  return saveWord("POST", "/api/words", input, "登録");
+}
+
+// original の単語を input の内容に置き換える。文面が変わった分の音声を生成してから返る
+export function updateWord(original: string, input: Word): Promise<Saved> {
+  return saveWord("PUT", `/api/words/${encodeURIComponent(original)}`, input, "保存");
 }

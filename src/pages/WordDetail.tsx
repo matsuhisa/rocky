@@ -17,7 +17,7 @@ export function WordDetail() {
   );
   const [loadError, setLoadError] = useState<string | null>(null);
   const { playing, error: playError, rate, play, stop, rewind, setRate } = usePlayer();
-  // 登録直後に音声の生成が失敗していた場合、登録画面から渡される
+  // 保存の直後に音声の生成が失敗していた場合、登録・編集画面から渡される
   const audioFailed = (useLocation().state as { audioFailed?: boolean } | null)?.audioFailed;
 
   useEffect(() => {
@@ -57,7 +57,7 @@ export function WordDetail() {
           </h1>
           {audioFailed && (
             <p className="error">
-              登録はできましたが、音声の生成に失敗しました。再生するときにもう一度生成します。
+              保存はできましたが、音声の生成に失敗しました。再生するときにもう一度生成します。
             </p>
           )}
           {playError && <p className="error">{playError}</p>}
@@ -122,6 +122,9 @@ export function WordDetail() {
               </section>
             );
           })}
+          <p className="page-actions">
+            <Link to={`/words/${encodeURIComponent(data.word.word)}/edit`}>この単語を編集</Link>
+          </p>
         </>
       )}
     </main>
