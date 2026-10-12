@@ -6,41 +6,51 @@ const MAX_SENTENCE_LENGTH = 500;
 const MAX_NOTE_LENGTH = 1000;
 const MAX_EXAMPLES = 10;
 
-type Row = { word: string; en: string | null; ja: string | null; note: string | null };
+const MAX_MEANING_LENGTH = 200;
+const MAX_MEANINGS = 10;
 
-const SELECT_ROWS = `
-  SELECT w.word, e.en, e.ja, e.note
-  FROM words w LEFT JOIN examples e ON e.word_id = w.id`;
+type WordRow = { id: number; word: string };
+type MeaningRow = { word_id: number; ja: string };
+type ExampleRow = { word_id: number; en: string; ja: string; note: string | null };
 
-// 単語ごとに例文をまとめる。行は単語・例文の順に並んでいる前提
-function toWords(rows: Row[]): Word[] {
-  const words: Word[] = [];
-  for (const { word, en, ja, note } of rows) {
-    let current = words.at(-1);
-    if (current?.word !== word) {
-      current = { word, examples: [] };
-      words.push(current);
-    }
-    if (en !== null && ja !== null) {
-      current.examples.push(note ? { en, ja, note } : { en, ja });
-    }
+// 単語と、その意味・例文をまとめて読む。word を渡すとその単語だけ
+async function loadWords(db: D1Database, word?: string): Promise<Word[]> {
+  const filter = word === undefined ? "" : "WHERE w.word = ?";
+  const query = (sql: string) => {
+    const statement = db.prepare(sql);
+    return word === undefined ? statement : statement.bind(word);
+  };
+  const [wordRows, meaningRows, exampleRows] = await db.batch([
+    query(`SELECT w.id, w.word FROM words w ${filter} ORDER BY w.id`),
+    query(
+      `SELECT m.word_id, m.ja FROM meanings m JOIN words w ON w.id = m.word_id
+       ${filter} ORDER BY m.word_id, m.position`,
+    ),
+    query(
+      `SELECT e.word_id, e.en, e.ja, e.note FROM examples e JOIN words w ON w.id = e.word_id
+       ${filter} ORDER BY e.word_id, e.position`,
+    ),
+  ]);
+
+  const words = new Map<number, Word>();
+  for (const { id, word } of wordRows.results as WordRow[]) {
+    words.set(id, { word, meanings: [], examples: [] });
   }
-  return words;
+  for (const { word_id, ja } of meaningRows.results as MeaningRow[]) {
+    words.get(word_id)?.meanings.push(ja);
+  }
+  for (const { word_id, en, ja, note } of exampleRows.results as ExampleRow[]) {
+    words.get(word_id)?.examples.push(note ? { en, ja, note } : { en, ja });
+  }
+  return [...words.values()];
 }
 
-export async function listWords(db: D1Database): Promise<Word[]> {
-  const { results } = await db
-    .prepare(`${SELECT_ROWS} ORDER BY w.id, e.position`)
-    .all<Row>();
-  return toWords(results);
+export function listWords(db: D1Database): Promise<Word[]> {
+  return loadWords(db);
 }
 
 export async function findWord(db: D1Database, word: string): Promise<Word | null> {
-  const { results } = await db
-    .prepare(`${SELECT_ROWS} WHERE w.word = ? ORDER BY e.position`)
-    .bind(word)
-    .all<Row>();
-  return toWords(results)[0] ?? null;
+  return (await loadWords(db, word))[0] ?? null;
 }
 
 export type WordResult =
@@ -57,7 +67,7 @@ export function validateWord(
   existing: { word: string }[],
 ): WordResult {
   const errors: string[] = [];
-  const raw = (input ?? {}) as { word?: unknown; examples?: unknown };
+  const raw = (input ?? {}) as { word?: unknown; meanings?: unknown; examples?: unknown };
 
   const word = textOf(raw.word);
   if (!word) {
@@ -67,6 +77,20 @@ export function validateWord(
   } else if (existing.some((w) => w.word === word)) {
     errors.push(`「${word}」はすでに登録されています。`);
   }
+
+  const meanings = (Array.isArray(raw.meanings) ? raw.meanings : []).map(textOf);
+  if (meanings.length === 0) {
+    errors.push("意味を1つ以上入力してください。");
+  } else if (meanings.length > MAX_MEANINGS) {
+    errors.push(`意味は${MAX_MEANINGS}個までです。`);
+  }
+  meanings.forEach((meaning, i) => {
+    if (!meaning) {
+      errors.push(`意味${i + 1}を入力してください。`);
+    } else if (meaning.length > MAX_MEANING_LENGTH) {
+      errors.push(`意味${i + 1}は${MAX_MEANING_LENGTH}文字以内で入力してください。`);
+    }
+  });
 
   const rawExamples = Array.isArray(raw.examples) ? raw.examples : [];
   if (rawExamples.length === 0) {
@@ -92,7 +116,9 @@ export function validateWord(
     return example;
   });
 
-  return errors.length > 0 ? { ok: false, errors } : { ok: true, word: { word, examples } };
+  return errors.length > 0
+    ? { ok: false, errors }
+    : { ok: true, word: { word, meanings, examples } };
 }
 
 const duplicated = (word: string): WordResult => ({
@@ -100,19 +126,30 @@ const duplicated = (word: string): WordResult => ({
   errors: [`「${word}」はすでに登録されています。`],
 });
 
-// 例文を入れる文。同じまとまりの中で先に単語を書き込んでおくこと
-function insertExamples(db: D1Database, { word, examples }: Word): D1PreparedStatement[] {
-  return examples.map((e, position) =>
-    db
-      .prepare(
-        `INSERT INTO examples (word_id, position, en, ja, note)
-         VALUES ((SELECT id FROM words WHERE word = ?), ?, ?, ?, ?)`,
-      )
-      .bind(word, position, e.en, e.ja, e.note ?? null),
-  );
+// 意味と例文を入れる文。同じまとまりの中で先に単語を書き込んでおくこと
+function insertDetails(
+  db: D1Database,
+  { word, meanings, examples }: Word,
+): D1PreparedStatement[] {
+  const wordId = "(SELECT id FROM words WHERE word = ?)";
+  return [
+    ...meanings.map((ja, position) =>
+      db
+        .prepare(`INSERT INTO meanings (word_id, position, ja) VALUES (${wordId}, ?, ?)`)
+        .bind(word, position, ja),
+    ),
+    ...examples.map((e, position) =>
+      db
+        .prepare(
+          `INSERT INTO examples (word_id, position, en, ja, note)
+           VALUES (${wordId}, ?, ?, ?, ?)`,
+        )
+        .bind(word, position, e.en, e.ja, e.note ?? null),
+    ),
+  ];
 }
 
-// 検証して登録する。単語と例文はまとめて書き込み、途中で失敗したら全体を取り消す
+// 検証して登録する。単語・意味・例文はまとめて書き込み、途中で失敗したら全体を取り消す
 export async function addWord(db: D1Database, input: unknown): Promise<WordResult> {
   const candidate = textOf((input as { word?: unknown } | null)?.word);
   const existing = await db
@@ -126,7 +163,7 @@ export async function addWord(db: D1Database, input: unknown): Promise<WordResul
   try {
     await db.batch([
       db.prepare("INSERT INTO words (word) VALUES (?)").bind(word),
-      ...insertExamples(db, validated.word),
+      ...insertDetails(db, validated.word),
     ]);
   } catch (e) {
     // 検証の直後に同じ単語が登録された場合
@@ -137,7 +174,7 @@ export async function addWord(db: D1Database, input: unknown): Promise<WordResul
 }
 
 // 検証して、original の単語を入力の内容に置き換える。単語が無ければ null。
-// 例文は入れ直す。途中で失敗したら全体を取り消す
+// 意味と例文は入れ直す。途中で失敗したら全体を取り消す
 export async function updateWord(
   db: D1Database,
   original: string,
@@ -161,8 +198,9 @@ export async function updateWord(
   try {
     await db.batch([
       db.prepare("UPDATE words SET word = ? WHERE id = ?").bind(word, target.id),
+      db.prepare("DELETE FROM meanings WHERE word_id = ?").bind(target.id),
       db.prepare("DELETE FROM examples WHERE word_id = ?").bind(target.id),
-      ...insertExamples(db, validated.word),
+      ...insertDetails(db, validated.word),
     ]);
   } catch (e) {
     // 検証の直後に同じ名前の単語が登録された場合

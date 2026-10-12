@@ -8,8 +8,11 @@ export type Example = {
 
 export type Word = {
   word: string;
+  // 日本語の意味。1件に「しかしながら、けれども」のように複数の訳語を書ける。
+  // 意味を登録できるようになる前の単語は空
+  meanings: string[];
   examples: Example[];
 };
 
 // 読み上げの順番に書ける項目
-export type SequenceField = "word" | "en" | "ja";
+export type SequenceField = "word" | "meaning" | "en" | "ja";

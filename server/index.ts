@@ -8,7 +8,7 @@ import type { Lang } from "./tts.ts";
 import { addWord, findWord, listWords, updateWord } from "./words.ts";
 
 // 読み上げ項目ごとの言語
-const LANG_OF: Record<SequenceField, Lang> = { word: "en", en: "en", ja: "ja" };
+const LANG_OF: Record<SequenceField, Lang> = { word: "en", meaning: "ja", en: "en", ja: "ja" };
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -23,9 +23,10 @@ app.get("/api/words", async (c) => {
   return c.json({ words: await listWords(c.env.DB) });
 });
 
-// 単語・例文の音声をまとめて生成しておく。失敗したら false (再生時に作り直される)
+// 単語・意味・例文の音声をまとめて生成しておく。失敗したら false (再生時に作り直される)
 async function prepareAudio(env: Env, word: Word): Promise<boolean> {
   const texts = new Map<string, Lang>([[word.word, "en"]]);
+  for (const meaning of word.meanings) texts.set(meaning, "ja");
   for (const e of word.examples) {
     texts.set(e.en, "en");
     texts.set(e.ja, "ja");
@@ -62,19 +63,25 @@ app.get("/api/words/:word", async (c) => {
 });
 
 // 登録済みの単語・例文の音声だけを返す (任意のテキストは読み上げない)
-// field=word | field=en&example=0 | field=ja&example=0
+// field=word | field=meaning&index=0 | field=en&index=0 | field=ja&index=0
+// (index は意味または例文の何番目か)
 app.get("/api/words/:word/audio", async (c) => {
   const word = await findWord(c.env.DB, c.req.param("word"));
   if (!word) return c.json({ error: "単語が見つかりません" }, 404);
 
   const field = c.req.query("field") ?? "";
   if (!(field in LANG_OF)) {
-    return c.json({ error: "field は word / en / ja のいずれかです" }, 400);
+    return c.json({ error: "field は word / meaning / en / ja のいずれかです" }, 400);
   }
   const key = field as SequenceField;
+  const index = Number(c.req.query("index"));
   const text =
-    key === "word" ? word.word : word.examples[Number(c.req.query("example"))]?.[key];
-  if (!text) return c.json({ error: "例文が見つかりません" }, 404);
+    key === "word"
+      ? word.word
+      : key === "meaning"
+        ? word.meanings[index]
+        : word.examples[index]?.[key];
+  if (!text) return c.json({ error: "意味または例文が見つかりません" }, 404);
 
   try {
     const wav = await audioFor(c.env, text, LANG_OF[key]);

@@ -177,3 +177,27 @@ select {
   margin-top: 32px;
   font-size: 0.9rem;
 }
+
+.word-list .meaning {
+  grid-row: 2;
+  grid-column: 1 / -1;
+}
+
+.word-list .example {
+  grid-row: 3;
+}
+
+.meanings {
+  padding-left: 24px;
+  font-size: 1.1rem;
+}
+
+.meaning-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.meaning-row button {
+  white-space: nowrap;
+}
