@@ -172,3 +172,8 @@ select {
   font: inherit;
   padding: 2px 4px;
 }
+
+.page-actions {
+  margin-top: 32px;
+  font-size: 0.9rem;
+}

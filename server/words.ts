@@ -43,18 +43,19 @@ export async function findWord(db: D1Database, word: string): Promise<Word | nul
   return toWords(results)[0] ?? null;
 }
 
-export type NewWordResult =
+export type WordResult =
   | { ok: true; word: Word }
   | { ok: false; errors: string[] };
 
 const textOf = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
 
-// 登録の入力を検証し、前後の空白を除いた単語データにする
-export function validateNewWord(
+// 登録・編集の入力を検証し、前後の空白を除いた単語データにする。
+// existing は同じ名前を使えない他の単語
+export function validateWord(
   input: unknown,
   existing: { word: string }[],
-): NewWordResult {
+): WordResult {
   const errors: string[] = [];
   const raw = (input ?? {}) as { word?: unknown; examples?: unknown };
 
@@ -94,34 +95,78 @@ export function validateNewWord(
   return errors.length > 0 ? { ok: false, errors } : { ok: true, word: { word, examples } };
 }
 
+const duplicated = (word: string): WordResult => ({
+  ok: false,
+  errors: [`「${word}」はすでに登録されています。`],
+});
+
+// 例文を入れる文。同じまとまりの中で先に単語を書き込んでおくこと
+function insertExamples(db: D1Database, { word, examples }: Word): D1PreparedStatement[] {
+  return examples.map((e, position) =>
+    db
+      .prepare(
+        `INSERT INTO examples (word_id, position, en, ja, note)
+         VALUES ((SELECT id FROM words WHERE word = ?), ?, ?, ?, ?)`,
+      )
+      .bind(word, position, e.en, e.ja, e.note ?? null),
+  );
+}
+
 // 検証して登録する。単語と例文はまとめて書き込み、途中で失敗したら全体を取り消す
-export async function addWord(db: D1Database, input: unknown): Promise<NewWordResult> {
+export async function addWord(db: D1Database, input: unknown): Promise<WordResult> {
   const candidate = textOf((input as { word?: unknown } | null)?.word);
   const existing = await db
     .prepare("SELECT word FROM words WHERE word = ?")
     .bind(candidate)
     .all<{ word: string }>();
-  const validated = validateNewWord(input, existing.results);
+  const validated = validateWord(input, existing.results);
   if (!validated.ok) return validated;
 
-  const { word, examples } = validated.word;
+  const { word } = validated.word;
   try {
     await db.batch([
       db.prepare("INSERT INTO words (word) VALUES (?)").bind(word),
-      ...examples.map((e, position) =>
-        db
-          .prepare(
-            `INSERT INTO examples (word_id, position, en, ja, note)
-             VALUES ((SELECT id FROM words WHERE word = ?), ?, ?, ?, ?)`,
-          )
-          .bind(word, position, e.en, e.ja, e.note ?? null),
-      ),
+      ...insertExamples(db, validated.word),
     ]);
   } catch (e) {
     // 検証の直後に同じ単語が登録された場合
-    if (String(e).includes("UNIQUE")) {
-      return { ok: false, errors: [`「${word}」はすでに登録されています。`] };
-    }
+    if (String(e).includes("UNIQUE")) return duplicated(word);
+    throw e;
+  }
+  return validated;
+}
+
+// 検証して、original の単語を入力の内容に置き換える。単語が無ければ null。
+// 例文は入れ直す。途中で失敗したら全体を取り消す
+export async function updateWord(
+  db: D1Database,
+  original: string,
+  input: unknown,
+): Promise<WordResult | null> {
+  const target = await db
+    .prepare("SELECT id FROM words WHERE word = ?")
+    .bind(original)
+    .first<{ id: number }>();
+  if (!target) return null;
+
+  const candidate = textOf((input as { word?: unknown } | null)?.word);
+  const others = await db
+    .prepare("SELECT word FROM words WHERE word = ? AND id != ?")
+    .bind(candidate, target.id)
+    .all<{ word: string }>();
+  const validated = validateWord(input, others.results);
+  if (!validated.ok) return validated;
+
+  const { word } = validated.word;
+  try {
+    await db.batch([
+      db.prepare("UPDATE words SET word = ? WHERE id = ?").bind(word, target.id),
+      db.prepare("DELETE FROM examples WHERE word_id = ?").bind(target.id),
+      ...insertExamples(db, validated.word),
+    ]);
+  } catch (e) {
+    // 検証の直後に同じ名前の単語が登録された場合
+    if (String(e).includes("UNIQUE")) return duplicated(word);
     throw e;
   }
   return validated;

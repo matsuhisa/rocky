@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import { SEQUENCE } from "../shared/sequence.ts";
-import type { SequenceField } from "../shared/types.ts";
+import type { SequenceField, Word } from "../shared/types.ts";
 import { requireAccess } from "./access.ts";
 import { audioFor, ensureAudio } from "./audio.ts";
 import type { Env } from "./env.ts";
 import type { Lang } from "./tts.ts";
-import { addWord, findWord, listWords } from "./words.ts";
+import { addWord, findWord, listWords, updateWord } from "./words.ts";
 
 // 読み上げ項目ごとの言語
 const LANG_OF: Record<SequenceField, Lang> = { word: "en", en: "en", ja: "ja" };
@@ -23,25 +23,36 @@ app.get("/api/words", async (c) => {
   return c.json({ words: await listWords(c.env.DB) });
 });
 
-app.post("/api/words", async (c) => {
-  const result = await addWord(c.env.DB, await c.req.json().catch(() => null));
-  if (!result.ok) return c.json({ error: result.errors.join(" "), errors: result.errors }, 400);
-
-  // 登録時に音声をまとめて生成しておく。失敗しても登録は取り消さず、再生時に作り直す
-  const { word } = result;
+// 単語・例文の音声をまとめて生成しておく。失敗したら false (再生時に作り直される)
+async function prepareAudio(env: Env, word: Word): Promise<boolean> {
   const texts = new Map<string, Lang>([[word.word, "en"]]);
   for (const e of word.examples) {
     texts.set(e.en, "en");
     texts.set(e.ja, "ja");
   }
-  let audioReady = true;
   try {
-    await Promise.all([...texts].map(([text, lang]) => ensureAudio(c.env, text, lang)));
+    await Promise.all([...texts].map(([text, lang]) => ensureAudio(env, text, lang)));
+    return true;
   } catch (e) {
     console.error(e);
-    audioReady = false;
+    return false;
   }
-  return c.json({ word, audioReady }, 201);
+}
+
+app.post("/api/words", async (c) => {
+  const result = await addWord(c.env.DB, await c.req.json().catch(() => null));
+  if (!result.ok) return c.json({ error: result.errors.join(" "), errors: result.errors }, 400);
+  // 音声の生成に失敗しても登録は取り消さない
+  return c.json({ word: result.word, audioReady: await prepareAudio(c.env, result.word) }, 201);
+});
+
+app.put("/api/words/:word", async (c) => {
+  const input = await c.req.json().catch(() => null);
+  const result = await updateWord(c.env.DB, c.req.param("word"), input);
+  if (!result) return c.json({ error: "単語が見つかりません", errors: ["単語が見つかりません。"] }, 404);
+  if (!result.ok) return c.json({ error: result.errors.join(" "), errors: result.errors }, 400);
+  // 文面が変わったものだけ新しく生成される
+  return c.json({ word: result.word, audioReady: await prepareAudio(c.env, result.word) });
 });
 
 app.get("/api/words/:word", async (c) => {
