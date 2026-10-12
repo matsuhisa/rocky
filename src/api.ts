@@ -20,9 +20,9 @@ export function fetchWord(
   return getJson(`/api/words/${encodeURIComponent(word)}`, "単語");
 }
 
-// 単語そのもの、または example 番目の例文の音声の URL
-export function audioUrl(word: string, field: SequenceField, example = 0): string {
-  const query = new URLSearchParams({ field, example: String(example) });
+// 単語そのもの、または index 番目の意味・例文の音声の URL
+export function audioUrl(word: string, field: SequenceField, index = 0): string {
+  const query = new URLSearchParams({ field, index: String(index) });
   return `/api/words/${encodeURIComponent(word)}/audio?${query}`;
 }
 

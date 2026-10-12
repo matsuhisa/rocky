@@ -24,11 +24,12 @@ export function WordList() {
       {words?.length === 0 && <p>まだ単語がありません。</p>}
       {words && words.length > 0 && (
         <ul className="word-list">
-          {words.map(({ word, examples }) => (
+          {words.map(({ word, meanings, examples }) => (
             <li key={word}>
               <Link className="word" to={`/words/${encodeURIComponent(word)}`}>
                 {word}
               </Link>
+              <span className="meaning">{meanings[0]}</span>
               <span className="example">{examples[0]?.en}</span>
               <span className="count">例文 {examples.length}</span>
             </li>

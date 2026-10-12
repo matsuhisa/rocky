@@ -15,9 +15,13 @@ type Props = {
   onSubmit: (word: Word) => Promise<void>;
 };
 
-// 単語と例文の入力フォーム。登録と編集で共用する
+// 単語・意味・例文の入力フォーム。登録と編集で共用する
 export function WordForm({ initial, submitLabel, submittingLabel, onSubmit }: Props) {
   const [word, setWord] = useState(initial?.word ?? "");
+  // 意味が未登録の単語を編集するときも、入力欄を1つ出しておく
+  const [meanings, setMeanings] = useState<string[]>(
+    initial?.meanings.length ? initial.meanings : [""],
+  );
   const [examples, setExamples] = useState<ExampleInput[]>(
     initial?.examples.map((e) => ({ ...e, note: e.note ?? "" })) ?? [emptyExample()],
   );
@@ -32,7 +36,7 @@ export function WordForm({ initial, submitLabel, submittingLabel, onSubmit }: Pr
     setSubmitting(true);
     setErrors([]);
     try {
-      await onSubmit({ word, examples });
+      await onSubmit({ word, meanings, examples });
     } catch (e) {
       setErrors(e instanceof ApiError ? e.errors : ["保存に失敗しました。"]);
       setSubmitting(false);
@@ -51,6 +55,35 @@ export function WordForm({ initial, submitLabel, submittingLabel, onSubmit }: Pr
           lang="en"
         />
       </label>
+
+      <fieldset>
+        <legend>意味</legend>
+        {meanings.map((meaning, i) => (
+          <div key={i} className="meaning-row">
+            <input
+              value={meaning}
+              onChange={(e) =>
+                setMeanings((list) => list.map((m, j) => (j === i ? e.target.value : m)))
+              }
+              required
+              aria-label={`意味${i + 1}`}
+              placeholder="例: しかしながら、けれども、とはいえ"
+            />
+            {meanings.length > 1 && (
+              <button
+                type="button"
+                aria-label={`意味${i + 1}を削除`}
+                onClick={() => setMeanings((list) => list.filter((_, j) => j !== i))}
+              >
+                削除
+              </button>
+            )}
+          </div>
+        ))}
+        <button type="button" onClick={() => setMeanings((list) => [...list, ""])}>
+          ＋ 意味を追加
+        </button>
+      </fieldset>
 
       {examples.map((example, i) => (
         <fieldset key={i}>

@@ -6,6 +6,7 @@ import { PLAYBACK_RATES, REWIND_SECONDS, usePlayer } from "../usePlayer.ts";
 
 const FIELD_LABELS: Record<SequenceField, string> = {
   word: "単語",
+  meaning: "意味",
   en: "英文",
   ja: "日本語訳",
 };
@@ -28,15 +29,15 @@ export function WordDetail() {
       .catch((e: Error) => setLoadError(e.message));
   }, [wordParam]);
 
-  // 1つだけ再生するボタン。再生中に押すと止まる
-  const playButton = (id: string, field: SequenceField, example = 0) => {
+  // 1つだけ再生するボタン。再生中に押すと止まる。index は意味または例文の何番目か
+  const playButton = (id: string, field: SequenceField, index = 0) => {
     const active = playing?.id === id;
     return (
       <button
         type="button"
         className="play"
         aria-label={`${FIELD_LABELS[field]}を${active ? "停止" : "再生"}`}
-        onClick={() => (active ? stop() : play(id, [audioUrl(wordParam, field, example)]))}
+        onClick={() => (active ? stop() : play(id, [audioUrl(wordParam, field, index)]))}
       >
         {!active ? "▶" : playing.loading ? "…" : "■"}
       </button>
@@ -55,6 +56,15 @@ export function WordDetail() {
           <h1>
             {data.word.word} {playButton("word", "word")}
           </h1>
+          {data.word.meanings.length > 0 && (
+            <ol className="meanings">
+              {data.word.meanings.map((meaning, i) => (
+                <li key={i}>
+                  {meaning} {playButton(`meaning-${i}`, "meaning", i)}
+                </li>
+              ))}
+            </ol>
+          )}
           {audioFailed && (
             <p className="error">
               保存はできましたが、音声の生成に失敗しました。再生するときにもう一度生成します。
@@ -76,6 +86,21 @@ export function WordDetail() {
           {data.word.examples.map((example, i) => {
             const sequenceId = `sequence-${i}`;
             const active = playing?.id === sequenceId;
+            // 意味の番では登録されている意味をすべて読む。意味が無い単語では番ごと飛ばす
+            const steps = data.sequence
+              .map((field) => ({
+                field,
+                urls:
+                  field === "meaning"
+                    ? data.word.meanings.map((_, m) => audioUrl(wordParam, field, m))
+                    : [audioUrl(wordParam, field, i)],
+              }))
+              .filter((step) => step.urls.length > 0);
+            // 再生中の音声が何番目の番にあたるか
+            const currentStep =
+              active && !playing.loading
+                ? steps.flatMap((step, s) => step.urls.map(() => s))[playing.index]
+                : -1;
             return (
               <section key={i} className="example-card">
                 <p className="en">
@@ -91,10 +116,7 @@ export function WordDetail() {
                     onClick={() =>
                       active
                         ? stop()
-                        : play(
-                            sequenceId,
-                            data.sequence.map((field) => audioUrl(wordParam, field, i)),
-                          )
+                        : play(sequenceId, steps.flatMap((step) => step.urls))
                     }
                   >
                     {!active ? "▶ 順番に再生" : playing.loading ? "読み込み中…" : "■ 停止"}
@@ -105,15 +127,8 @@ export function WordDetail() {
                     </button>
                   )}
                   <ol>
-                    {data.sequence.map((field, step) => (
-                      <li
-                        key={step}
-                        className={
-                          active && !playing.loading && playing.index === step
-                            ? "current"
-                            : undefined
-                        }
-                      >
+                    {steps.map(({ field }, s) => (
+                      <li key={s} className={currentStep === s ? "current" : undefined}>
                         {FIELD_LABELS[field]}
                       </li>
                     ))}
